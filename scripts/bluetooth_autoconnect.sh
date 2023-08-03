@@ -1,0 +1,1 @@
+bluetoothctl trust mac_address
