@@ -167,6 +167,7 @@ class SoundBar:
     async def _send_command(self, command):
         packet = encode(command)
         self.writer.write(packet)
+        await self.writer.drain()
     
     @staticmethod
     def parse_device_status(pkt):
