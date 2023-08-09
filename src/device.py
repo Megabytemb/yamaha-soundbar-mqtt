@@ -45,7 +45,7 @@ class Device:
             self.conf["password"],
         )
 
-        self.yam = SoundBar(self.conf["bt_addr"])
+        self.yam = SoundBar(self.conf["bt_addr"], loop=self.loop)
         self.yam.state_update_callback = self.state_updated
 
         self.entities = []
@@ -78,8 +78,8 @@ class Device:
 
     
     async def state_updated(self, new_state):
-        if new_state == self.old_state:
-            return
+        # if new_state == self.old_state:
+        #     return
         _LOGGER.info(f"New State: {new_state}")
 
         self.old_state = new_state

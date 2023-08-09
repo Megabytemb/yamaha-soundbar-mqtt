@@ -37,5 +37,5 @@ class VolumeSensor(SensorEntity):
         if volume is not None:
             volume_percentage = (volume / MAX_VOLUME)
 
-            await self.send_availability()
             await self.device.mqtt.publish(self.discovery_msg["state_topic"], volume_percentage, DEFAULT_QOS, True)
+        await self.send_availability()

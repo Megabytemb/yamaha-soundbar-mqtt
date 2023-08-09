@@ -83,8 +83,8 @@ class InputSelect(SelectEntity):
         current_input = soundbar_state.get("input")
         if current_input is not None:
             current_input = INPUT_MAPPING[current_input]
-            await self.send_availability()
             await self.device.mqtt.publish(self.discovery_msg["state_topic"], current_input, DEFAULT_QOS, True)
+        await self.send_availability()
     
     def handle_command(self, payload):
         LOGGER.info("New Command: %s", payload)
@@ -115,11 +115,11 @@ class SurroundSelect(SelectEntity):
         current_surround = soundbar_state.get("surround")
         if current_surround is not None:
             current_surround = SURROUND_MAPPING[current_surround]
-            await self.send_availability()
             await self.device.mqtt.publish(self.discovery_msg["state_topic"], current_surround, DEFAULT_QOS, True)
+        await self.send_availability()
     
     def handle_command(self, payload):
         LOGGER.info("New Command: %s", payload)
         new_input = get_key_by_value(SURROUND_MAPPING, payload)
-        self.device.loop.create_task(self.device.yam.set_input(new_input))
+        self.device.loop.create_task(self.device.yam.set_surround(new_input))
         return 

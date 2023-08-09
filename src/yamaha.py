@@ -89,9 +89,10 @@ def encode(packet) -> bytes:
         return ''.join([chr(x) for x in [0xcc, 0xaa, len(pload)] + pload + [csum_value]])
 
 class SoundBar:
-    def __init__(self, bt_attr, bt_port=1):
+    def __init__(self, bt_attr, bt_port=1, loop=None):
         self.bt_attr = bt_attr
         self.bt_port = bt_port
+        self.loop = loop
 
         self.reader = None
         self.writer = None
@@ -128,6 +129,9 @@ class SoundBar:
         else:
             command = COMMANDS["power_off"]
         await self._send_command(command)
+        if power is False:
+            await self.close()
+
         await self.report_status()
     
     async def set_bass_boost(self, state: bool):
@@ -184,6 +188,7 @@ class SoundBar:
             now = datetime.now()
             diff = now - self.last_recieved
             if diff.seconds > HEARTBEAT_INTERVAL.seconds*3:
+                LOGGER.warning("Watchdog Triggered.")
                 break
         await self.reconnect()
             
@@ -197,23 +202,34 @@ class SoundBar:
             if self.state_update_callback is not None:
                 asyncio.create_task(self.state_update_callback(self.state))
     
-    async def connect(self):
-        LOGGER.info("Trying to connect to Soundbar.")
-        try:
-            async with anyio.fail_after(1):
-                self.sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
-                await anyio.to_thread.run_sync(self.sock.connect, (self.bt_attr, self.bt_port))
-                self.reader, self.writer = await asyncio.open_connection(sock=self.sock)
-        except Exception as e:
-            LOGGER.error(e)
-            await asyncio.sleep(1)
-            asyncio.create_task(self.connect())
-            return
+    async def connect(self, forground_retry=False):
+        while self.connected is False:
+            LOGGER.info("Trying to connect to Soundbar.")
+            try:
+                async with anyio.fail_after(1):
+                    self.sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
+                    self.sock.settimeout(1)
+                    await anyio.to_thread.run_sync(self.sock.connect, (self.bt_attr, self.bt_port))
+                    self.reader, self.writer = await asyncio.open_connection(sock=self.sock)
+                    self.connected = True
+            except Exception as e:
+                LOGGER.error(str(e))
+                await anyio.to_thread.run_sync(self.sock.close)
+                await asyncio.sleep(1)
+                
+                if forground_retry is False:
+                    LOGGER.info("re-trying in background task.")
+                    asyncio.create_task(self.connect(True))
+                    return
 
-        self.connected = True
+
+        LOGGER.info("Connected to Soundbar.")
         self.reader_task = asyncio.create_task(self.handle_recieved())
         self.heartbeat_task = asyncio.create_task(self._heartbeat())
-        self.watchdog_task = asyncio.create_task(self._watchdog())
+        
+        if self.watchdog_task is None:
+            self.watchdog_task = asyncio.create_task(self._watchdog())
+        await self.report_status()
     
     async def close(self):
         self.connected = False
@@ -232,9 +248,9 @@ class SoundBar:
             self.heartbeat_task.cancel()
             self.heartbeat_task = None
         
-        if self.watchdog_task is not None:
-            self.watchdog_task.cancel()
-            self.watchdog_task = None
+        # if self.watchdog_task is not None:
+        #     self.watchdog_task.cancel()
+        #     self.watchdog_task = None
     
     async def reconnect(self):
         await self.close()
@@ -243,7 +259,10 @@ class SoundBar:
     async def _send_command(self, command):
         packet = encode(command)
         self.writer.write(packet)
-        await self.writer.drain()
+        try:
+            await self.writer.drain()
+        except:
+            await self.reconnect()
     
     @staticmethod
     def parse_device_status(pkt):

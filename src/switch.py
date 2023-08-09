@@ -57,8 +57,8 @@ class PowerSwitch(SwitchEntity):
                 payload = "ON"
             else:
                 payload = "OFF"
-            await self.send_availability()
             await self.device.mqtt.publish(self.discovery_msg["state_topic"], payload, DEFAULT_QOS, True)
+        await self.send_availability()
     
     def handle_command(self, payload):
         LOGGER.info("New Command: %s", payload)
@@ -86,8 +86,8 @@ class MuteSwitch(SwitchEntity):
                 payload = "ON"
             else:
                 payload = "OFF"
-            await self.send_availability()
             await self.device.mqtt.publish(self.discovery_msg["state_topic"], payload, DEFAULT_QOS, True)
+        await self.send_availability()
     
     def handle_command(self, payload):
         LOGGER.info("New Command: %s", payload)
@@ -115,8 +115,8 @@ class ClearVoiceSwitch(SwitchEntity):
                 payload = "ON"
             else:
                 payload = "OFF"
-            await self.send_availability()
             await self.device.mqtt.publish(self.discovery_msg["state_topic"], payload, DEFAULT_QOS, True)
+        await self.send_availability()
     
     def handle_command(self, payload):
         LOGGER.info("New Command: %s", payload)
@@ -144,8 +144,8 @@ class BassBoostSwitch(SwitchEntity):
                 payload = "ON"
             else:
                 payload = "OFF"
-            await self.send_availability()
             await self.device.mqtt.publish(self.discovery_msg["state_topic"], payload, DEFAULT_QOS, True)
+        await self.send_availability()
     
     def handle_command(self, payload):
         LOGGER.info("New Command: %s", payload)
