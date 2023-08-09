@@ -1,1 +1,3 @@
-pybluez
+anyio
+paho-mqtt
+python-slugify

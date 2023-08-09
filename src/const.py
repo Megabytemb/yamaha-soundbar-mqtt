@@ -13,3 +13,5 @@ DEVICE_INFO = {
     "suggested_area": "Kitchen",
     "sw_version": "1.0",
 }
+
+BASE_TOPIC = f"home/{DEVICE_UNIQUE_ID}/"

@@ -2,7 +2,14 @@ from src.mqtt import MQTTClient
 from src.yamaha import SoundBar
 import logging
 import json
-from src.const import DEVICE_INFO, DEVICE_NAME, DEVICE_UNIQUE_ID, DEFAULT_QOS
+from src.const import DEVICE_INFO, DEVICE_NAME, DEVICE_UNIQUE_ID, DEFAULT_QOS, BASE_TOPIC
+import os
+import asyncio
+from src.sensor import VolumeSensor
+from src.select import InputSelect, SurroundSelect
+from src.switch import PowerSwitch, MuteSwitch, ClearVoiceSwitch, BassBoostSwitch
+from src.button import VolumeDownButton, VolumeUpButton, ToggleBluetoothStandbyButton
+import anyio
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,8 +33,9 @@ discovery_msg = {
 
 class Device:
     def __init__(self):
-        with open("config.json") as f:
-            self.conf = json.loads(f.read())
+        self.conf = get_config()
+        self.loop = asyncio.get_event_loop()
+        self.old_state = {}
 
         self.mqtt = MQTTClient(
             self,
@@ -38,6 +46,11 @@ class Device:
         )
 
         self.yam = SoundBar(self.conf["bt_addr"])
+        self.yam.state_update_callback = self.state_updated
+
+        self.entities = []
+
+        self.shutdown: asyncio.Event = None
     
     async def run(self):
         """Run the ScreenManager."""
@@ -47,10 +60,55 @@ class Device:
         self.mqtt.on_connect = on_connect
         await self.yam.connect()
         await self.mqtt.connect()
+
+        self.shutdown = asyncio.Event()
+
+        self.entities.append(VolumeSensor(self))
+        self.entities.append(InputSelect(self))
+        self.entities.append(SurroundSelect(self))
+        self.entities.append(PowerSwitch(self))
+        self.entities.append(MuteSwitch(self))
+        self.entities.append(BassBoostSwitch(self))
+        self.entities.append(ClearVoiceSwitch(self))
+        self.entities.append(VolumeUpButton(self))
+        self.entities.append(VolumeDownButton(self))
+        self.entities.append(ToggleBluetoothStandbyButton(self))
+        
+        await self.shutdown.wait()
+
+    
+    async def state_updated(self, new_state):
+        if new_state == self.old_state:
+            return
+        _LOGGER.info(f"New State: {new_state}")
+
+        self.old_state = new_state
+        for entity in self.entities:
+            asyncio.create_task(entity.update())
     
     async def register(self):
         # Publish the discovery message to Home Assistant
-        discovery_topic = f"homeassistant/media_player/{MEDIA_PLAYER_DEVICE_ID}/config"
-        await self.mqtt.publish(
-            discovery_topic, json.dumps(discovery_msg), DEFAULT_QOS, True
-        )
+        for entity in self.entities:
+            await entity.register()
+
+def get_config():
+    """Get MQTT config from environment."""
+    mqtt_conf = {
+        "host": os.environ.get("MQTT_HOST"),
+        "port": int(os.environ.get("MQTT_PORT", 1883)),  # Use default port 1883 if not provided
+        "username": os.environ.get("MQTT_USERNAME"),
+        "password": os.environ.get("MQTT_PASSWORD"),
+        "bt_addr": os.environ.get("BT_ATTR"),
+    }
+
+    # Validate the configuration
+    if not mqtt_conf["host"]:
+        raise ValueError("MQTT_HOST environment variable is not set.")
+    if not mqtt_conf["username"]:
+        raise ValueError("MQTT_USERNAME environment variable is not set.")
+    if not mqtt_conf["password"]:
+        raise ValueError("MQTT_PASSWORD environment variable is not set.")
+
+    # Additional validation and type conversion can be added as needed
+
+    return mqtt_conf

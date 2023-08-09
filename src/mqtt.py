@@ -99,7 +99,7 @@ class MQTTClient:
             msg_info = await self.loop.run_in_executor(
                 None, self._mqttc.publish, topic, payload, qos, retain
             )
-            _LOGGER.info(
+            _LOGGER.debug(
                 "Transmitting message on %s: '%s', mid: %s",
                 topic,
                 payload,

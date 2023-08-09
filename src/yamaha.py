@@ -2,6 +2,12 @@
 import socket
 import asyncio
 import anyio
+from datetime import datetime, timedelta
+import logging
+
+LOGGER = logging.getLogger(__name__)
+
+HEARTBEAT_INTERVAL = timedelta(seconds=1)
 
 # Mapping of input values to names
 INPUT_NAMES = {
@@ -84,7 +90,6 @@ def encode(packet) -> bytes:
 
 class SoundBar:
     def __init__(self, bt_attr, bt_port=1):
-        self.sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
         self.bt_attr = bt_attr
         self.bt_port = bt_port
 
@@ -93,6 +98,21 @@ class SoundBar:
 
         self.reader_task = None
         self.heartbeat_task = None
+        self.watchdog_task = None
+        self.state = {}
+        self.state_update_callback = None
+        self.connected = False
+        self.last_recieved = datetime.now()
+
+        self.sock: socket.socket = None
+    
+    async def set_surround(self, surround):
+        surround_str = "set_surround_" + surround
+        command = COMMANDS.get(surround_str)
+        if command is None:
+            raise ValueError("Surround not found")
+        await self._send_command(command)
+        await self.report_status()
     
     async def set_input(self, input):
         input_str = "set_input_" + input
@@ -100,6 +120,7 @@ class SoundBar:
         if command is None:
             raise ValueError("Input not found")
         await self._send_command(command)
+        await self.report_status()
     
     async def set_power(self, power: bool):
         if power is True:
@@ -107,6 +128,23 @@ class SoundBar:
         else:
             command = COMMANDS["power_off"]
         await self._send_command(command)
+        await self.report_status()
+    
+    async def set_bass_boost(self, state: bool):
+        if state is True:
+            command = COMMANDS["bass_ext_on"]
+        else:
+            command = COMMANDS["bass_ext_off"]
+        await self._send_command(command)
+        await self.report_status()
+    
+    async def set_clear_voice(self, state: bool):
+        if state is True:
+            command = COMMANDS["clearvoice_on"]
+        else:
+            command = COMMANDS["clearvoice_off"]
+        await self._send_command(command)
+        await self.report_status()
     
     async def set_mute(self, mute: bool):
         if mute is True:
@@ -114,18 +152,22 @@ class SoundBar:
         else:
             command = COMMANDS["mute_off"]
         await self._send_command(command)
+        await self.report_status()
     
     async def volume_up(self):
         command = COMMANDS["volume_up"]
         await self._send_command(command)
+        await self.report_status()
     
     async def volume_down(self):
         command = COMMANDS["volume_down"]
         await self._send_command(command)
+        await self.report_status()
     
     async def toggle_bl_standby(self):
         command = COMMANDS["bluetooth_standby_toggle"]
         await self._send_command(command)
+        await self.report_status()
     
     async def report_status(self):
         command = COMMANDS["report_status"]
@@ -134,23 +176,53 @@ class SoundBar:
     async def _heartbeat(self):
         while True:
             await self.report_status()
-            await asyncio.sleep(10)
+            await asyncio.sleep(HEARTBEAT_INTERVAL.seconds)
+    
+    async def _watchdog(self):
+        while True:
+            await asyncio.sleep(HEARTBEAT_INTERVAL.seconds*3)
+            now = datetime.now()
+            diff = now - self.last_recieved
+            if diff.seconds > HEARTBEAT_INTERVAL.seconds*3:
+                break
+        await self.reconnect()
+            
     
     async def handle_recieved(self):
         while True:
             data = await self.reader.read(1024)
-            print("Received", data.hex())
-            print(self.parse_device_status(data))
+            LOGGER.debug("Received", data.hex())
+            self.last_recieved = datetime.now()
+            self.state = self.parse_device_status(data)
+            if self.state_update_callback is not None:
+                asyncio.create_task(self.state_update_callback(self.state))
     
     async def connect(self):
-        await anyio.to_thread.run_sync(self.sock.connect, (self.bt_attr, self.bt_port))
-        self.reader, self.writer = await asyncio.open_connection(sock=self.sock)
+        LOGGER.info("Trying to connect to Soundbar.")
+        try:
+            async with anyio.fail_after(1):
+                self.sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
+                await anyio.to_thread.run_sync(self.sock.connect, (self.bt_attr, self.bt_port))
+                self.reader, self.writer = await asyncio.open_connection(sock=self.sock)
+        except Exception as e:
+            LOGGER.error(e)
+            await asyncio.sleep(1)
+            asyncio.create_task(self.connect())
+            return
+
+        self.connected = True
         self.reader_task = asyncio.create_task(self.handle_recieved())
         self.heartbeat_task = asyncio.create_task(self._heartbeat())
+        self.watchdog_task = asyncio.create_task(self._watchdog())
     
     async def close(self):
-        self.writer.close()
-        await anyio.to_thread.run_sync(self.sock.close)
+        self.connected = False
+        if self.writer:
+            self.writer.close()
+        if self.sock:
+            await anyio.to_thread.run_sync(self.sock.close)
+
+        asyncio.create_task(self.state_update_callback({}))
         
         if self.reader_task is not None:
             self.reader_task.cancel()
@@ -159,6 +231,10 @@ class SoundBar:
         if self.heartbeat_task is not None:
             self.heartbeat_task.cancel()
             self.heartbeat_task = None
+        
+        if self.watchdog_task is not None:
+            self.watchdog_task.cancel()
+            self.watchdog_task = None
     
     async def reconnect(self):
         await self.close()
@@ -171,11 +247,8 @@ class SoundBar:
     
     @staticmethod
     def parse_device_status(pkt):
-        print(pkt.hex())
         pkt = pkt[3:]
         # remove the first 4 bytes, which is <ccaa><length><type>
-        print(pkt.hex())
-        print(pkt[2])
         params = {}
         params['power'] = pkt[2] != 0
         params['input'] = INPUT_NAMES.get(pkt[3])
