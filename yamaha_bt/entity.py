@@ -1,5 +1,5 @@
-from src.const import BASE_TOPIC, DEFAULT_QOS, DEVICE_UNIQUE_ID, DEVICE_INFO
-from src.util import slugify
+from yamaha_bt.const import BASE_TOPIC, DEFAULT_QOS, DEVICE_UNIQUE_ID, DEVICE_INFO
+from yamaha_bt.util import slugify
 import json
 
 class Entity:

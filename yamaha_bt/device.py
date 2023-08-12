@@ -1,14 +1,14 @@
-from src.mqtt import MQTTClient
-from src.yamaha import SoundBar
+from yamaha_bt.mqtt import MQTTClient
+from yamaha_bt.yamaha import SoundBar
 import logging
 import json
-from src.const import DEVICE_INFO, DEVICE_NAME, DEVICE_UNIQUE_ID, DEFAULT_QOS, BASE_TOPIC
+from yamaha_bt.const import DEVICE_INFO, DEVICE_NAME, DEVICE_UNIQUE_ID, DEFAULT_QOS, BASE_TOPIC
 import os
 import asyncio
-from src.sensor import VolumeSensor
-from src.select import InputSelect, SurroundSelect
-from src.switch import PowerSwitch, MuteSwitch, ClearVoiceSwitch, BassBoostSwitch
-from src.button import VolumeDownButton, VolumeUpButton, ToggleBluetoothStandbyButton
+from yamaha_bt.sensor import VolumeSensor
+from yamaha_bt.select import InputSelect, SurroundSelect
+from yamaha_bt.switch import PowerSwitch, MuteSwitch, ClearVoiceSwitch, BassBoostSwitch
+from yamaha_bt.button import VolumeDownButton, VolumeUpButton, ToggleBluetoothStandbyButton
 import anyio
 
 _LOGGER = logging.getLogger(__name__)
@@ -80,7 +80,7 @@ class Device:
     async def state_updated(self, new_state):
         # if new_state == self.old_state:
         #     return
-        _LOGGER.info(f"New State: {new_state}")
+        _LOGGER.debug(f"New State: {new_state}")
 
         self.old_state = new_state
         for entity in self.entities:

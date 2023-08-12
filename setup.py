@@ -15,10 +15,14 @@ class CustomInstall(install):
         subprocess.call(['sudo', 'systemctl', 'start', 'my_service'])
 
 setup(
-    name='my_package',
+    name='yamaha_bt',
     version='0.1',
-    packages=find_packages(),
-    package_data={'my_package': ['systemd/my_service.service']},
-    install_requires=[],
-    cmdclass={'install': CustomInstall},
+    packages="yamaha_bt",
+    # package_data={'my_package': ['systemd/my_service.service']},
+    install_requires=[
+        "anyio",
+        "paho-mqtt",
+        "python-slugify"
+    ],
+    # cmdclass={'install': CustomInstall},
 )

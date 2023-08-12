@@ -1,0 +1,14 @@
+[Unit]
+Description=Yamaha Bluetooth to MQTT
+After=bluetooth.service
+Requires=bluetooth.service
+
+[Service]
+Type=simple
+User=pi
+EnvironmentFile=-/etc/yamaha_bt
+ExecStart=/usr/bin/python3 -m yamaha_bt
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

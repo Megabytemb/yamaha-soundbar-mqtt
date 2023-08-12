@@ -1,7 +1,7 @@
 """Sensor Module."""
-from src.const import DEVICE_INFO, BASE_TOPIC, DEFAULT_QOS, DEVICE_UNIQUE_ID
-from src.util import slugify
-from src.entity import Entity
+from yamaha_bt.const import DEVICE_INFO, BASE_TOPIC, DEFAULT_QOS, DEVICE_UNIQUE_ID
+from yamaha_bt.util import slugify
+from yamaha_bt.entity import Entity
 import json
 
 MAX_VOLUME = 50

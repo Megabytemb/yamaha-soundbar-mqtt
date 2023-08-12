@@ -1,3 +1,0 @@
-anyio
-paho-mqtt
-python-slugify

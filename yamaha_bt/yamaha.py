@@ -202,19 +202,28 @@ class SoundBar:
             if self.state_update_callback is not None:
                 asyncio.create_task(self.state_update_callback(self.state))
     
+    def _connect_to_socket(self):
+        """Create a connection to the socket."""
+        sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
+        sock.settimeout(1)
+        try:
+            sock.connect((self.bt_attr, self.bt_port))
+        except Exception as e:
+            sock.close()
+            raise e
+
+        return sock
+    
     async def connect(self, forground_retry=False):
         while self.connected is False:
             LOGGER.info("Trying to connect to Soundbar.")
             try:
                 async with anyio.fail_after(1):
-                    self.sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
-                    self.sock.settimeout(1)
-                    await anyio.to_thread.run_sync(self.sock.connect, (self.bt_attr, self.bt_port))
+                    self.sock = await anyio.to_thread.run_sync(self._connect_to_socket)
                     self.reader, self.writer = await asyncio.open_connection(sock=self.sock)
                     self.connected = True
             except Exception as e:
-                LOGGER.error(str(e))
-                await anyio.to_thread.run_sync(self.sock.close)
+                LOGGER.debug(str(e))
                 await asyncio.sleep(1)
                 
                 if forground_retry is False:
