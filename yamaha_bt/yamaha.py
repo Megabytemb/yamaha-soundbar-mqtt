@@ -104,6 +104,7 @@ class SoundBar:
         self.state_update_callback = None
         self.connected = False
         self.last_recieved = datetime.now()
+        self.heartbeat_event = asyncio.Event()
 
         self.sock: socket.socket = None
     
@@ -184,13 +185,13 @@ class SoundBar:
     
     async def _watchdog(self):
         while True:
-            await asyncio.sleep(HEARTBEAT_INTERVAL.seconds*3)
-            now = datetime.now()
-            diff = now - self.last_recieved
-            if diff.seconds > HEARTBEAT_INTERVAL.seconds*3:
-                LOGGER.warning("Watchdog Triggered.")
+            try:
+                with anyio.fail_after(HEARTBEAT_INTERVAL.seconds*3):
+                    await self.heartbeat_event.wait()
+            except Exception as e:
+                LOGGER.info(e)
                 break
-        await self.reconnect()
+            await self.reconnect()
             
     
     async def handle_recieved(self):
@@ -232,6 +233,7 @@ class SoundBar:
                     return
 
 
+        self.heartbeat_event.set()
         LOGGER.info("Connected to Soundbar.")
         self.reader_task = asyncio.create_task(self.handle_recieved())
         self.heartbeat_task = asyncio.create_task(self._heartbeat())
@@ -256,16 +258,13 @@ class SoundBar:
         if self.heartbeat_task is not None:
             self.heartbeat_task.cancel()
             self.heartbeat_task = None
-        
-        # if self.watchdog_task is not None:
-        #     self.watchdog_task.cancel()
-        #     self.watchdog_task = None
     
     async def reconnect(self):
         await self.close()
         await self.connect()
     
     async def _send_command(self, command):
+        self.heartbeat_event.set()
         packet = encode(command)
         self.writer.write(packet)
         try:
